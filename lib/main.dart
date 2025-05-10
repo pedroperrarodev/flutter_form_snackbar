@@ -26,7 +26,12 @@ class Product {
   final String imageUrl;
   final double price;
 
-  Product({required this.id, required this.name, required this.imageUrl, required this.price});
+  Product({
+    required this.id,
+    required this.name,
+    required this.imageUrl,
+    required this.price,
+  });
 }
 
 final Map<String, List<Product>> categories = {
@@ -34,7 +39,7 @@ final Map<String, List<Product>> categories = {
     Product(id: 'donut1', name: 'Donut de Chocolate', imageUrl: 'assets/img/donnut_chocolate.png', price: 4.99),
     Product(id: 'donut2', name: 'Donut com Morango', imageUrl: 'assets/img/dunnut_morango.png', price: 5.49),
     Product(id: 'donut3', name: 'Donut Nevado', imageUrl: 'assets/img/dunnut_nevado.png', price: 4.99),
-    Product(id: 'donut4', name: 'Donut Vanilla', imageUrl: 'assets/img/dunnut.png', price: 5.49),
+    Product(id: 'donut4', name: 'Donut Vanilla', imageUrl: 'assets/img/dunnut.png', price: 25.49),
     Product(id: 'donut5', name: 'Donut de Morango com Nutella', imageUrl: 'assets/img/dunnut_morango_nutella.png', price: 4.99),
     Product(id: 'donut6', name: 'Donut de Pistache', imageUrl: 'assets/img/dunnut_pistache.png', price: 5.49),
     Product(id: 'donut7', name: 'Donut de Chocolate Amargo', imageUrl: 'assets/img/dunnut_chocolate_amargo.png', price: 4.99),
@@ -69,7 +74,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   late TabController _tabController;
   final tabs = ['Donuts', 'Bolos', 'Bebidas'];
 
-  // Carrinho de compras
   Map<String, int> cart = {};
 
   void addToCart(Product product) {
@@ -87,6 +91,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           cart[product.id] = cart[product.id]! - 1;
         }
       }
+    });
+  }
+
+  void clearCart() {
+    setState(() {
+      cart.clear();
     });
   }
 
@@ -111,7 +121,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             onPressed: () {
               showModalBottomSheet(
                 context: context,
-                builder: (_) => CartView(cart: cart),
+                builder: (_) => CartView(
+                  cart: cart,
+                  addToCart: addToCart,
+                  removeFromCart: removeFromCart,
+                  clearCart: clearCart,
+                ),
               );
             },
           )
@@ -161,28 +176,167 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 }
 
-class CartView extends StatelessWidget {
-  final Map<String, int> cart;
 
-  const CartView({super.key, required this.cart});
+class CartView extends StatefulWidget {
+  final Map<String, int> cart;
+  final void Function(Product) addToCart;
+  final void Function(Product) removeFromCart;
+  final VoidCallback clearCart;
+
+  const CartView({
+    super.key,
+    required this.cart,
+    required this.addToCart,
+    required this.removeFromCart,
+    required this.clearCart,
+  });
+
+  @override
+  State<CartView> createState() => _CartViewState();
+}
+
+class _CartViewState extends State<CartView> {
+  double get totalPrice {
+    double total = 0.0;
+    final List<Product> allProducts = categories.values.expand((list) => list).toList();
+    for (var productId in widget.cart.keys) {
+      final product = allProducts.firstWhere((p) => p.id == productId);
+      total += product.price * widget.cart[productId]!;
+    }
+    return total;
+  }
+
+  double get discount {
+    double total = totalPrice;
+    if (total > 150) {
+      return 0.10; // 10% de desconto
+    } else if (total > 100) {
+      return 0.05; // 5% de desconto
+    } else if (total > 50) {
+      return 0.03; // 3% de desconto
+    }
+    return 0.0; // Sem desconto
+  }
+
+  double get finalPrice {
+    return totalPrice * (1 - discount);
+  }
 
   @override
   Widget build(BuildContext context) {
     final List<Product> allProducts = categories.values.expand((list) => list).toList();
-    final List<Product> cartProducts = allProducts.where((p) => cart.containsKey(p.id)).toList();
+    final List<Product> cartProducts = allProducts.where((p) => widget.cart.containsKey(p.id)).toList();
 
-    return ListView.builder(
-      itemCount: cartProducts.length,
-      itemBuilder: (context, index) {
-        final product = cartProducts[index];
-        final quantity = cart[product.id]!;
-        return ListTile(
-          leading: Image.asset(product.imageUrl, width: 40),
-          title: Text(product.name),
-          subtitle: Text('Quantidade: $quantity'),
-          trailing: Text('R\$ ${(product.price * quantity).toStringAsFixed(2)}'),
-        );
-      },
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: ElevatedButton.icon(
+            onPressed: () {
+              widget.clearCart();
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.delete_forever),
+            label: const Text("Limpar Carrinho"),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: cartProducts.length,
+            itemBuilder: (context, index) {
+              final product = cartProducts[index];
+              final quantity = widget.cart[product.id]!;
+
+              return ListTile(
+                leading: Image.asset(product.imageUrl, width: 40),
+                title: Text(product.name),
+                subtitle: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove),
+                      onPressed: () {
+                        setState(() {
+                          widget.removeFromCart(product);
+                        });
+                      },
+                    ),
+                    Text('$quantity'),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () {
+                        setState(() {
+                          widget.addToCart(product);
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                trailing: Text('R\$ ${(product.price * quantity).toStringAsFixed(2)}'),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Total: R\$ ${totalPrice.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              if (discount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    'Desconto: ${discount * 100}%',
+                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: () {
+                  // Navegar para a página de pagamento
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const PaymentPage()),
+                  );
+                },
+                child: Text('Realizar Pedido (R\$ ${finalPrice.toStringAsFixed(2)})'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class PaymentPage extends StatelessWidget {
+  const PaymentPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Página de Pagamento'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Você foi direcionado para a página de pagamento!',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context); // Voltar para o carrinho
+              },
+              child: const Text('Voltar'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
